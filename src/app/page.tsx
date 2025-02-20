@@ -1,21 +1,27 @@
 'use client';
 import * as pdfjsLib from 'pdfjs-dist';
 import { TextItem, TextMarkedContent } from 'pdfjs-dist/types/src/display/api';
-import React, { ChangeEvent } from 'react';
+import React,  { ChangeEvent } from 'react';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 const AllHeaders = ["记账日期", "货币", "交易金额", "联机余额", "交易摘要", "对手信息", "客户摘要"];
 
-const extractTableFromPage = async (page: pdfjsLib.PDFPageProxy) => {
+const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
   const textContent = await page.getTextContent();
   const allItems = textContent.items.filter(
     (item: TextItem | TextMarkedContent): item is TextItem => Boolean(`${(item as TextItem)?.str ?? ''}`.trim())
   );
+
+  // 不同的导出格式可能只有部分列
   const headerItems = AllHeaders
     .map((header) => allItems.find((item) => item.str === header))
     .filter((item): item is TextItem => Boolean(item));
-
+  const headerDateItem = headerItems.find((item) => item.str === '记账日期');
+  if (!headerDateItem) {
+    throw Error('未找到记账日期标题列')
+  }
+  
   const headerXRanges = headerItems.map((item, index) => {
     return {
       title: item.str,
@@ -25,18 +31,14 @@ const extractTableFromPage = async (page: pdfjsLib.PDFPageProxy) => {
     }
   });
 
-  const headerDateItem = headerItems.find((item) => item.str === '记账日期');
-
-  if (!headerDateItem) {
-    throw Error('未找到记账日期标题列')
-  }
-
-  // x 轴和日期列对齐
-  const isDateCol = (item: TextItem) => item.transform[4] === headerDateItem.transform[4] && /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(item?.str);
-
   const table: TextItem[][][] = [];
   const ignoreItems: TextItem[] = [];
   const curRow: TextItem[][] = [];
+
+  // x 轴和日期列对齐 && YYYY-MM-DD
+  const isDateCol = (item: TextItem) =>
+    item.transform[4] === headerDateItem.transform[4] &&
+    /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(item?.str);
 
   const getItemXIndex = (item: TextItem) => {
     const x = item.transform[4];
@@ -54,6 +56,7 @@ const extractTableFromPage = async (page: pdfjsLib.PDFPageProxy) => {
       curRow.push([item]);
     } else {
       if (curRow.length) {
+        // 第二及后续列
         const xIndex = getItemXIndex(item);
         if (typeof xIndex === 'undefined') {
           ignoreItems.push(item);
@@ -61,28 +64,16 @@ const extractTableFromPage = async (page: pdfjsLib.PDFPageProxy) => {
           if (!curRow[xIndex]) curRow[xIndex] = [];
           curRow[xIndex].push(item);
         }
-        // 真实数据之前的
       } else {
+        // 数据表格之前的信息文本直接忽略
         ignoreItems.push(item);
       }
     }
   })
 
-  const csv = table.map((row) => {
-    return row
-      .map((cell) => {
-        const cellStr = (cell || []).map((item) => `${item.str || ''}`.trim()).join('');
-        return cellStr;
-      });
-  });
-
-  console.log('ignoreItems', ignoreItems);
-  console.log('table', table);
-  console.log('csv', csv);
-
   return {
     ignoreItems,
-    csv,
+    headerItems,
     table,
   }
 }
@@ -98,23 +89,46 @@ const Home: React.FC = () => {
         try {
           // 加载 PDF 文件
           const pdf = await pdfjsLib.getDocument(typedArray).promise;
-          const numPages = pdf.numPages;
           const allIgnoreItems: TextItem[] = [];
-          const allCsv: string[][] = [];
+          const allTable: TextItem[][][] = [];
+          const headerItems: TextItem[] = [];
 
-          for (let i = 1; i <= numPages; i++) {
+          for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
-            const table = await extractTableFromPage(page);
-            allIgnoreItems.push(...table.ignoreItems)
-            allCsv.push(...table.csv)
+            const info = await extractInfoFromPage(page);
+            allIgnoreItems.push(...info.ignoreItems)
+            allTable.push(...info.table)
+
+            if (i === 1) {
+              headerItems.push(...info.headerItems);
+            }
           }
-          console.log('allIgnoreItems', allIgnoreItems);
-          console.log('allCsv', allCsv);
+
+          const csvHeader = headerItems.map((item) => item.str).join(',');
+
+          const csvBody = allTable
+            // 合并单元格内容
+            .map((row) => row.map((cell) => (cell || []).map((item) => `${item.str || ''}`.trim()).join('')))
+            // 如果单元格内容包含逗号，则用双引号包裹
+            .map((row) => row.map((cell) => cell.includes(',') ? `"${cell.replace(/"/g, '""')}"` : cell).join(','))
+            .join('\n');
+          
+          const csv = csvHeader + '\n' + csvBody;
+
+          // 创建 Blob 对象
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+          // 创建下载链接
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'output.csv';
+          a.click();
+          URL.revokeObjectURL(url);
         } catch (error) {
           console.error('Error parsing PDF:', error);
         }
       };
-
 
       reader.readAsArrayBuffer(file);
     }
