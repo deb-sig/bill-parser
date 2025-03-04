@@ -5,6 +5,13 @@ import React,  { ChangeEvent } from 'react';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
+/**
+ * 招行信用卡的账单特点与解析思路：
+ * - 标题列宽度不定、交易记录行高度不定，用户可以自己选择导出列、交易记录行高由交易摘要的文字数量决定
+ * - 每行每列的元素一定会有，且都对齐，日期是每行记录的第一个元素
+ * - 先识别一共有哪些列，然后根据每行的日期来判断是否是新的一条记录
+ */
+
 const AllHeaders = ["记账日期", "货币", "交易金额", "联机余额", "交易摘要", "对手信息", "客户摘要"];
 
 const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {

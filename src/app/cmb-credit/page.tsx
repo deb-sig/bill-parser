@@ -5,22 +5,31 @@ import React,  { ChangeEvent } from 'react';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
-const AllHeaders = ["记账日期", "货币", "交易金额", "联机余额", "交易摘要", "对手信息", "客户摘要"];
+type PromiseValue<T> = T extends Promise<infer U> ? U : T;
 
-const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
-  const textContent = await page.getTextContent();
+/**
+ * 招行储蓄卡的账单特点与解析思路：
+ * - 标题列宽度固定、交易记录行高度固定，交易摘要部分超出后会自动截断不会换行，基于表头列分析横轴范围、基于每行的卡号分析每行纵轴范围（卡号是每行固定都会有、容易被识别的列）
+ * - 只有第一页有表头，记录第一页表头，全局使用
+ * - 每条交易记录只有月日没有年，需要记录账单日来为后续的分析提供上下文，故保留账单标题行
+ */
+
+const AllHeaders = ["交易日", "记账日", "交易摘要", "人民币金额", "卡号末四位", "交易地金额"];
+
+const extractHeaderInfoFromDoc = async (doc: pdfjsLib.PDFDocumentProxy) => {
+  const firstPage = await doc.getPage(1);
+  const textContent = await firstPage.getTextContent();
   const allItems = textContent.items.filter(
     (item: TextItem | TextMarkedContent): item is TextItem => Boolean(`${(item as TextItem)?.str ?? ''}`.trim())
   );
+
+  const titleItem = allItems.find((item) => /招商银行信用卡对账单/.test(item.str));
 
   // 不同的导出格式可能只有部分列
   const headerItems = AllHeaders
     .map((header) => allItems.find((item) => item.str === header))
     .filter((item): item is TextItem => Boolean(item));
-  const headerDateItem = headerItems.find((item) => item.str === '记账日期');
-  if (!headerDateItem) {
-    throw Error('未找到记账日期标题列')
-  }
+  const headerCardItem = headerItems.find((item) => item.str === '卡号末四位');
   
   const headerXRanges = headerItems.map((item, index) => {
     return {
@@ -31,14 +40,24 @@ const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
     }
   });
 
-  const table: TextItem[][][] = [];
-  const ignoreItems: TextItem[] = [];
-  const curRow: TextItem[][] = [];
+  console.log('allItems', allItems);
 
-  // x 轴和日期列对齐 && YYYY-MM-DD
-  const isDateCol = (item: TextItem) =>
-    item.transform[4] === headerDateItem.transform[4] &&
-    /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(item?.str);
+  if (!headerCardItem) {
+    throw Error('未找到卡号末四位标题列')
+  }
+
+  return {
+    titleItem,
+    headerItems,
+    headerXRanges,
+  };
+}
+
+const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy, { headerXRanges }: PromiseValue<ReturnType<typeof extractHeaderInfoFromDoc>>) => {
+  const textContent = await page.getTextContent();
+  const allItems = textContent.items.filter(
+    (item: TextItem | TextMarkedContent): item is TextItem => Boolean(`${(item as TextItem)?.str ?? ''}`.trim())
+  );
 
   const getItemXIndex = (item: TextItem) => {
     const x = item.transform[4];
@@ -46,34 +65,45 @@ const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
     return xRange?.colIdx;
   }
 
+  const table: TextItem[][] = [];
+  const ignoreItems: TextItem[] = [];
+
+  // 在卡号列 && 四位数字
+  const isCardNoCol = (item: TextItem) => {
+    return getItemXIndex(item) === 4 && /^\d{4}$/.test(item?.str);
+  };
+
+  const cardNoItems = allItems.filter(isCardNoCol)
+
+  const rowYRanges = cardNoItems.map((item, index) => {
+    return {
+      rowIdx: index,
+      yBottom: item.transform[5] - 1,
+      yTop: item.transform[5] + item.height + 1,
+    }
+  })
+
+  const getItemYIndex = (item: TextItem) => {
+    const y = item.transform[5];
+    const yRange = rowYRanges.find((r) => r.yBottom <= y && r.yTop >= y);
+    return yRange?.rowIdx;
+  }
+
   allItems.forEach(item => {
-    if (isDateCol(item)) {
-      // 新的一行，把上一行的先保存下，并重新初始化 curRow
-      if (curRow.length) {
-        table.push([...curRow]);
-        curRow.length = 0;
+    const xIndex = getItemXIndex(item);
+    const yIndex = getItemYIndex(item);
+    if (typeof xIndex !== 'undefined' && typeof yIndex !== 'undefined') {
+      if (!table[yIndex]) {
+        table[yIndex] = Array(6).fill(null);
       }
-      curRow.push([item]);
+      table[yIndex][xIndex] = item;
     } else {
-      if (curRow.length) {
-        // 第二及后续列
-        const xIndex = getItemXIndex(item);
-        if (typeof xIndex === 'undefined') {
-          ignoreItems.push(item);
-        } else {
-          if (!curRow[xIndex]) curRow[xIndex] = [];
-          curRow[xIndex].push(item);
-        }
-      } else {
-        // 数据表格之前的信息文本直接忽略
-        ignoreItems.push(item);
-      }
+      ignoreItems.push(item);
     }
   })
 
   return {
     ignoreItems,
-    headerItems,
     table,
   }
 }
@@ -90,30 +120,30 @@ const Home: React.FC = () => {
           // 加载 PDF 文件
           const pdf = await pdfjsLib.getDocument(typedArray).promise;
           const allIgnoreItems: TextItem[] = [];
-          const allTable: TextItem[][][] = [];
-          const headerItems: TextItem[] = [];
+          const allTable: (TextItem | null)[][] = [];
+
+          const headerInfo = await extractHeaderInfoFromDoc(pdf);
 
           for (let i = 1; i <= pdf.numPages; i++) {
+          // for (let i = 1; i <= 1; i++) {
             const page = await pdf.getPage(i);
-            const info = await extractInfoFromPage(page);
+            const info = await extractInfoFromPage(page, headerInfo);
             allIgnoreItems.push(...info.ignoreItems)
             allTable.push(...info.table)
-
-            if (i === 1) {
-              headerItems.push(...info.headerItems);
-            }
           }
 
-          const csvHeader = headerItems.map((item) => item.str).join(',');
+          const csvTitle = headerInfo.titleItem?.str || "招商银行信用卡对账单";
+          const csvHeader = headerInfo.headerItems.map((item) => item.str).join(',');
 
           const csvBody = allTable
             // 合并单元格内容
-            .map((row) => row.map((cell) => (cell || []).map((item) => `${item.str || ''}`.trim()).join('')))
+            .map((row) => row.map((item) => `${item?.str || ''}`.trim())
             // 如果单元格内容包含逗号，则用双引号包裹
-            .map((row) => row.map((cell) => cell.includes(',') ? `"${cell.replace(/"/g, '""')}"` : cell).join(','))
+            .map((row) => row.includes(',') ? `"${row.replace(/"/g, '""')}"` : row).join(','))
             .join('\n');
           
-          const csv = csvHeader + '\n' + csvBody;
+          const csv = csvTitle + '\n' + csvHeader + '\n' + csvBody;
+          console.log('csv', csv);
 
           // 创建 Blob 对象
           const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
