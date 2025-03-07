@@ -11,6 +11,7 @@
   "dependencies": {
     "next": "15.1.7",
     "pdfjs-dist": "^4.10.38",
+    "postal-mime": "^2.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

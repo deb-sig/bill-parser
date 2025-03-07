@@ -11,6 +11,9 @@ dependencies:
   pdfjs-dist:
     specifier: ^4.10.38
     version: 4.10.38
+  postal-mime:
+    specifier: ^2.4.3
+    version: 2.4.3
   react:
     specifier: ^19.0.0
     version: 19.0.0
@@ -2584,6 +2587,10 @@ packages:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
     dev: true
+
+  /postal-mime@2.4.3:
+    resolution: {integrity: sha512-KT8P+/We7LH48EhjmLRLEiQx+HI6zZ5TTeuzhuZkMbcJnp9mdmxm/FgiRIzmhZm8mxmk8mtisIAelq1wNwumxg==}
+    dev: false
 
   /postcss-import@15.1.0(postcss@8.5.2):
     resolution: {integrity: sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==}
