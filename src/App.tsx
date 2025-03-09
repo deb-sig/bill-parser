@@ -1,37 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Layout, Header, Content, Footer } from './components/layout';
+import Intro from './components/intro';
+import Convertor from './components/convertor';
+import Advantage from './components/advantage';
 
-import CmbCredit from './cmb-credit';
-import CmbDebit from './cmb-debit';
-import BocomCredit from './bocom-credit';
-
-type BillType = 
-  | 'cmb_debit' 
-  | 'cmb_credit'
-  | 'bocom_credit';
-
-const BillTypeList: BillType[] = [
-  'cmb_debit',
-  'cmb_credit',
-  'bocom_credit',
-];
-
-const BillTypeCompMap: Record<BillType, React.FC> = {
-  'cmb_debit': CmbDebit,
-  'cmb_credit': CmbCredit,
-  'bocom_credit': BocomCredit,
-}
 
 const Index: React.FC = () => {
-  const [billType, setBillType] = useState<BillType>('cmb_debit');
-  const Comp = BillTypeCompMap[billType];
-
   return (
-    <div className="flex flex-col">
-      {BillTypeList.map(t => (
-        <p onClick={() => setBillType(t)}>{t} {billType === t ? '(selected)' : ''}</p>
-      ))}
-      <Comp />
-    </div>
+    <Layout>
+      <Header />
+      <Content>
+        <Intro />
+        <Convertor />
+        <Advantage />
+      </Content>
+      <Footer />
+    </Layout>
   );
 }
 
