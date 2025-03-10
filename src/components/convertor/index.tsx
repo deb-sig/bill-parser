@@ -1,59 +1,92 @@
 import { Button, Segmented, Upload } from "antd";
 import React, { useState } from "react";
-import { BillType, BillTypeList, BillTypeTextMap } from "../../utils/constants";
 import { SegmentedOptions } from "antd/es/segmented";
-import { ClockCircleOutlined, CloudUploadOutlined, DownloadOutlined } from "@ant-design/icons";
-
-// import CmbCredit from '../../bocom-credit';
-// import CmbDebit from '../../cmb-debit';
-// import BocomCredit from '../../bocom-credit';
-
+import { RcFile } from "antd/es/upload";
+import { CheckCircleOutlined, ClockCircleOutlined, CloudUploadOutlined, DownloadOutlined, LoadingOutlined } from "@ant-design/icons";
+import { AdapterMap, AdapterList } from '../../adapters';
+import { downloadCsvFile } from "../../utils";
 import './index.css';
 
-// const BillTypeCompMap: Record<BillType, React.FC> = {
-//   'cmb_debit': CmbDebit,
-//   'cmb_credit': CmbCredit,
-//   'bocom_credit': BocomCredit,
-// }
-
-
-const options: SegmentedOptions<BillType> = BillTypeList.map((t) => {
+const options: SegmentedOptions<string> = AdapterList.map((a) => {
   return (
     {
       label: (
         <div style={{ padding: 4 }}>
-          <div>{BillTypeTextMap[t]}</div>
+          <div>{a.name}</div>
         </div>
       ),
-      value: t,
+      value: a.key,
     }
   )
 });
 
 const Convertor: React.FC = () => {
-  const [billType, setBillType] = useState<BillType>('cmb_debit');
-  // const Comp = BillTypeCompMap[billType];
+  const [selectedKey, setSelectedKey] = useState<string>(AdapterList[0]?.key);
+  const [sourceFile, setSourceFile] = useState<File>();
+  const [csv, setCsv] = useState<string>();
+  const selectedAdapter = AdapterMap[selectedKey];
+
+  const handleSelectorChange = (k: string) => {
+    setSelectedKey(k);
+    setSourceFile(undefined);
+    setCsv(undefined);
+  }
+
+  const handleUpload = async (file: RcFile) => {
+    setSourceFile(file);
+    const csv = await selectedAdapter.converter(file);
+    setCsv(csv);
+  };
+
+  const handleDownload = () => {
+    if (sourceFile && csv) {
+      downloadCsvFile(csv, sourceFile.name);
+    }
+  }
+
+  const renderStatus = () => {
+    if (sourceFile && !csv) {
+      return <><LoadingOutlined /> 文件转换中：{sourceFile.name || '未知文件名'}</>;
+    }
+
+    if (sourceFile && csv) {
+      return <><CheckCircleOutlined /> 文件转换完成：{sourceFile.name || '未知文件名'}</>;
+    }
+
+    return <><ClockCircleOutlined /> 等待文件上传</>;
+  }
 
   return (
     <div className="app-convertor">
-      <Segmented<BillType>
+      <Segmented<string>
         className="app-convertor-selector"
         options={options}
-        value={billType}
-        onChange={(t) => setBillType(t)}
+        value={selectedKey}
+        onChange={handleSelectorChange}
       />
-      {/* <Comp /> */}
       <div className="app-convertor-files">
-        <Upload.Dragger className="app-convertor-upload">
+        <Upload.Dragger
+          className="app-convertor-upload"
+          name="file"
+          multiple={false}
+          showUploadList={false}
+          accept={selectedAdapter.sourceFileFormat.map((f) => `.${f}`).join(',')}
+          beforeUpload={handleUpload}
+        >
           <CloudUploadOutlined className="app-convertor-upload-icon" />
           <p className="ant-upload-text">点击或拖拽文件到此处上传</p>
-          <p className="ant-upload-hint">支持的格式：PDF/EML</p>
+          <p className="ant-upload-hint">支持的格式：{selectedAdapter.sourceFileFormat.join('/')}</p>
         </Upload.Dragger>
         <div className="app-convertor-download">
           <div className="app-convertor-download-status">
-            <ClockCircleOutlined /> 等待文件上传
+            {renderStatus()}
           </div>
-          <Button type="primary" icon={<DownloadOutlined />}>
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            disabled={!csv}
+            onClick={handleDownload}
+          >
             下载 CSV
           </Button>
         </div>

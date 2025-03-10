@@ -1,9 +1,6 @@
-'use client';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjs from 'pdfjs-dist';
 import { TextItem, TextMarkedContent } from 'pdfjs-dist/types/src/display/api';
-import React,  { ChangeEvent } from 'react';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+import { Adapter } from '../types';
 
 /**
  * 招行信用卡的账单特点与解析思路：
@@ -14,7 +11,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
 
 const AllHeaders = ["记账日期", "货币", "交易金额", "联机余额", "交易摘要", "对手信息", "客户摘要"];
 
-const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
+const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
   const textContent = await page.getTextContent();
   const allItems = textContent.items.filter(
     (item: TextItem | TextMarkedContent): item is TextItem => Boolean(`${(item as TextItem)?.str ?? ''}`.trim())
@@ -85,67 +82,58 @@ const extractInfoFromPage = async (page: pdfjsLib.PDFPageProxy) => {
   }
 }
 
-const Home: React.FC = () => {
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+const convertFromPdf = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
     if (file && file.type === 'application/pdf') {
-      const reader = new FileReader();
-
-      reader.onload = async (event) => {
-        const typedArray = new Uint8Array(event.target?.result as ArrayBuffer);
-        try {
-          // 加载 PDF 文件
-          const pdf = await pdfjsLib.getDocument(typedArray).promise;
-          const allIgnoreItems: TextItem[] = [];
-          const allTable: TextItem[][][] = [];
-          const headerItems: TextItem[] = [];
-
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const info = await extractInfoFromPage(page);
-            allIgnoreItems.push(...info.ignoreItems)
-            allTable.push(...info.table)
-
-            if (i === 1) {
-              headerItems.push(...info.headerItems);
-            }
-          }
-
-          const csvHeader = headerItems.map((item) => item.str).join(',');
-
-          const csvBody = allTable
-            // 合并单元格内容
-            .map((row) => row.map((cell) => (cell || []).map((item) => `${item.str || ''}`.trim()).join('')))
-            // 如果单元格内容包含逗号，则用双引号包裹
-            .map((row) => row.map((cell) => cell.includes(',') ? `"${cell.replace(/"/g, '""')}"` : cell).join(','))
-            .join('\n');
-          
-          const csv = csvHeader + '\n' + csvBody;
-
-          // 创建 Blob 对象
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-
-          // 创建下载链接
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'output.csv';
-          a.click();
-          URL.revokeObjectURL(url);
-        } catch (error) {
-          console.error('Error parsing PDF:', error);
-        }
-      };
-
-      reader.readAsArrayBuffer(file);
+      reject(Error('文件格式异常'));
     }
-  };
 
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <input type="file" accept=".pdf" onChange={handleFileChange} />
-    </div>
-  );
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      const typedArray = new Uint8Array(event.target?.result as ArrayBuffer);
+      try {
+        // 加载 PDF 文件
+        const pdf = await pdfjs.getDocument(typedArray).promise;
+        const allIgnoreItems: TextItem[] = [];
+        const allTable: TextItem[][][] = [];
+        const headerItems: TextItem[] = [];
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const info = await extractInfoFromPage(page);
+          allIgnoreItems.push(...info.ignoreItems)
+          allTable.push(...info.table)
+
+          if (i === 1) {
+            headerItems.push(...info.headerItems);
+          }
+        }
+
+        const csvHeader = headerItems.map((item) => item.str).join(',');
+
+        const csvBody = allTable
+          // 合并单元格内容
+          .map((row) => row.map((cell) => (cell || []).map((item) => `${item.str || ''}`.trim()).join('')))
+          // 如果单元格内容包含逗号，则用双引号包裹
+          .map((row) => row.map((cell) => cell.includes(',') ? `"${cell.replace(/"/g, '""')}"` : cell).join(','))
+          .join('\n');
+        
+        const csv = csvHeader + '\n' + csvBody;
+
+        resolve(csv);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
 }
 
-export default Home;
+export const CmbDebitAdapter: Adapter = {
+  key: 'cmb_debit',
+  name: '招行银行储蓄卡',
+  sourceFileFormat: ['pdf'],
+  converter: convertFromPdf,
+};
