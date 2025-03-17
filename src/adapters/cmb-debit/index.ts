@@ -37,7 +37,6 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
 
   const table: TextItem[][][] = [];
   const ignoreItems: TextItem[] = [];
-  const curRow: TextItem[][] = [];
 
   // x 轴和日期列对齐 && YYYY-MM-DD
   const isDateCol = (item: TextItem) =>
@@ -52,14 +51,13 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
 
   allItems.forEach(item => {
     if (isDateCol(item)) {
-      // 新的一行，把上一行的先保存下，并重新初始化 curRow
-      if (curRow.length) {
-        table.push([...curRow]);
-        curRow.length = 0;
-      }
-      curRow.push([item]);
+      // 新的一行初始化，直接放入 table
+      const newRow: TextItem[][] = Array(Headers.length).fill(null).map(() => []);
+      newRow[0] = [item];
+      table.push(newRow);
     } else {
-      if (curRow.length) {
+      const curRow = table[table.length - 1];
+      if (curRow && curRow.length) {
         // 第二及后续列
         const xIndex = getItemXIndex(item);
         if (typeof xIndex === 'undefined') {
@@ -84,10 +82,6 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
 
 const convertFromPdf = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    if (file && file.type === 'application/pdf') {
-      reject(Error('文件格式异常'));
-    }
-
     const reader = new FileReader();
 
     reader.onload = async (event) => {
