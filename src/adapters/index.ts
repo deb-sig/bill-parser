@@ -1,4 +1,5 @@
 import { BocomCreditAdapter } from './bocom-credit';
+import { BocomDebitAdapter } from './bocom-debit';
 import { CmbCreditAdapter } from './cmb-credit'
 import { CmbDebitAdapter } from './cmb-debit'
 import { Adapter } from './types';
@@ -8,6 +9,7 @@ export const AdapterList = [
   CmbCreditAdapter,
   CmbDebitAdapter,
   BocomCreditAdapter,
+  BocomDebitAdapter,
 ].sort(
   (a, b) => compareKey(a.key, b.key)
 );
