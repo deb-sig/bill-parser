@@ -3,6 +3,8 @@ import { Layout, Header, Content, Footer } from './components/layout';
 import Intro from './components/intro';
 import Convertor from './components/convertor';
 import Advantage from './components/advantage';
+import Debugger from './components/debugger';
+import useQueryString from './hooks/use-query-string';
 
 
 const Index: React.FC = () => {
@@ -19,4 +21,10 @@ const Index: React.FC = () => {
   );
 }
 
-export default Index;
+const App: React.FC = () => {
+  const qs = useQueryString<{ debugger?: string }>();
+  
+  return qs.debugger ? <Debugger /> : <Index />
+};
+
+export default App;
