@@ -54,7 +54,18 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
     return getItemXIndex(item) === 0 && /^\d+$/.test(item.str);
   };
 
+  let hasEnded = false;
+
   allItems.forEach(item => {
+    if (hasEnded) {
+      return;
+    }
+
+    if (item.str === '打印完毕') {
+      hasEnded = true;
+      return;
+    }
+
     if (isSerialNumCol(item)) {
       // 新的一行初始化，直接放入 table
       const newRow: TextItem[][] = Array(Headers.length).fill(null).map(() => []);
