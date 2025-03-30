@@ -4,7 +4,8 @@ import { Adapter, PromiseValue } from '../types';
 
 /**
  * 招行储蓄卡的账单特点与解析思路：
- * - 标题列宽度固定、交易记录行高度固定，交易摘要部分超出后会自动截断不会换行，基于表头列分析横轴范围、基于每行的卡号分析每行纵轴范围（卡号是每行固定都会有、容易被识别的列）
+ * - 标题列宽度固定、交易记录行高度固定，交易摘要部分超出后会自动截断不会换行，基于表头列分析横轴范围、基于每行的记账日分析每行纵轴范围
+ * - 记账日是每行固定都会有、容易被识别的列，**卡号列不一定会有！**
  * - 只有第一页有表头，记录第一页表头，全局使用
  * - 每条交易记录只有月日没有年，需要记录账单日来为后续的分析提供上下文，故保留账单标题行
  */
@@ -63,14 +64,14 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy, { headerXRanges }: 
   const table: TextItem[][] = [];
   const ignoreItems: TextItem[] = [];
 
-  // 在卡号列 && 四位数字
-  const isCardNoCol = (item: TextItem) => {
-    return getItemXIndex(item) === 4 && /^\d{4}$/.test(item?.str);
+  // 在记账日列 && MM/DD
+  const isPostedDateCol = (item: TextItem) => {
+    return getItemXIndex(item) === 1 && /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])$/.test(item?.str);
   };
 
-  const cardNoItems = allItems.filter(isCardNoCol)
+  const postedDateItems = allItems.filter(isPostedDateCol)
 
-  const rowYRanges = cardNoItems.map((item, index) => {
+  const rowYRanges = postedDateItems.map((item, index) => {
     return {
       rowIdx: index,
       yBottom: item.transform[5] - 1,
