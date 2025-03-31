@@ -13,7 +13,8 @@ const extractInfoFromHtml = (html: string) => {
 
   $tableList.forEach(($table) => {
     const $headThList = $table.querySelector('thead')?.querySelector('tr')?.querySelectorAll('th');
-    const matched = [...$headThList || []].every(($th, idx) => $th.innerText === Headers[idx]);
+    // use `innerHTML` instead of `innerText`, see https://github.com/jsdom/jsdom/issues/1245
+    const matched = [...$headThList || []].every(($th, idx) => $th.innerHTML === Headers[idx]);
     if (!matched) {
       return;
     }
@@ -27,7 +28,7 @@ const extractInfoFromHtml = (html: string) => {
       }
 
       // 去掉头尾空格，以及中间多余的空格
-      const row = [...$tdList].map(($td) => $td.innerText.trim().replace(/\s+/g, ' '));
+      const row = [...$tdList].map(($td) => $td.innerHTML.trim().replace(/\s+/g, ' '));
       resultTable.push(row);
     })
   });
