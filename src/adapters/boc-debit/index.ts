@@ -133,8 +133,13 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy, { cardIdItem, heade
 const convertFromPdf = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = async (e) => {
-      const typedArray = new Uint8Array(event?.target?.result as ArrayBuffer);
+    reader.onload = async (event: ProgressEvent<FileReader>) => {
+      const arrayBuffer = event.target?.result;
+      if (!(arrayBuffer instanceof ArrayBuffer)) {
+        reject(new Error('读取文件失败'));
+        return;
+      }
+      const typedArray = new Uint8Array(arrayBuffer);
       try {
         // 加载 PDF 文件
         console.log("try to load pdf")
