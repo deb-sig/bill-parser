@@ -1,6 +1,4 @@
 import { vi, beforeEach, test, describe, expect } from 'vitest';
-import fs from 'fs'
-
 import { BocDebitAdapter } from '../../../src/adapters/boc-debit';
 
 import p1TextItems from './p1.json';
