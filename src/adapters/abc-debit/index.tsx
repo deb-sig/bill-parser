@@ -19,9 +19,9 @@ const extractInfoFromPage = async (page: pdfjs.PDFPageProxy) => {
   console.log('allItems', allItems);
 
   const headerItems = AllHeaders
-    .map((header) => allItems.find((item) => item.str === header))
+    .map((header) => allItems.find((item) => item.str.normalize('NFKC') === header.normalize('NFKC')))
     .filter((item): item is TextItem => Boolean(item));
-  const headerDateItem = headerItems.find((item) => item.str === AllHeaders[0]);
+  const headerDateItem = headerItems.find((item) => item.str.normalize('NFKC') === AllHeaders[0].normalize('NFKC'));
   
   const headerXRanges = headerItems.map((item, index) => {
     return {
