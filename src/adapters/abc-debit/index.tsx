@@ -115,7 +115,7 @@ const convertFromPdf = (file: File): Promise<string> => {
           return row.map((cell) => (cell || []).map((item) => `${item.str || ''}`.trim()).join(''));
         });
 
-        const csv = createCsvTextFromTable([headerInStr, ...allTableInStr]);
+        const csv = createCsvTextFromTable([headerInStr, ...allTableInStr]).normalize('NFKC');
 
         resolve(csv);
       } catch (error) {
